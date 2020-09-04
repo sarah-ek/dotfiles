@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+import argparse
+import sys
+import shutil
+from os import chdir
+from pathlib import Path
+from subprocess import run
+
+
+def init(name, author, email):
+    Path(name).mkdir()
+    chdir(name)
+    if email is None:
+        email = "<>"
+    if author is not None:
+        run(["git", "init"], check=True)
+        run(["git", "checkout", "-b", "main"], check=True)
+        run(["git", "config", "--local", "user.name", author], check=True)
+        run(["git", "config", "--local", "user.email", email], check=True)
+        run(["git", "commit", "--allow-empty", "-m", "Initial commit"], check=True)
+
+
+def write_to_file(filename, text):
+    with open(filename, "w") as file:
+        file.write(text)
+
+
+def cpp(name, author, email, standard_version, enable_gcc_extensions):
+    top_level_cmake = """\
+cmake_minimum_required(VERSION 3.16)
+project(%(project_name)s CXX)
+
+include(cmake/standard_project_settings.cmake)
+
+# Link this 'library' to set the c++ standard / compile-time options requested
+add_library(project_options INTERFACE)
+set(CMAKE_CXX_STANDARD %(standard_version)s)
+set(CMAKE_CXX_EXTENSIONS %(enable_gcc_extensions)s)
+
+# Link this 'library' to use the warnings specified in compiler_warnings.cmake
+add_library(project_warnings INTERFACE)
+
+# standard compiler warnings
+include(cmake/compiler_warnings.cmake)
+set_project_warnings(project_warnings)
+
+# sanitizer options if supported by compiler
+include(cmake/sanitizers.cmake)
+enable_sanitizers(project_options)
+
+# enable doxygen
+include(cmake/doxygen.cmake)
+enable_doxygen()
+
+# allow for static analysis options
+include(cmake/static_analyzers.cmake)
+
+option(ENABLE_PCH "Enable Precompiled Headers" OFF)
+if(ENABLE_PCH)
+  target_precompile_headers(
+    project_options
+    INTERFACE
+    <vector>
+    <string>
+    <map>
+    <utility>
+  )
+endif()
+
+# Conan dependencies
+set(CONAN_REQUIRES
+    # Boost Software License 1.0
+    boost/1.74.0
+    range-v3/0.11.0
+    #
+    # MIT License
+    gsl-lite/0.36.0
+    fmt/7.0.3
+    spdlog/1.7.0
+    backward-cpp/1.5
+    #
+    # Mozilla Public License 2.0
+    eigen/3.3.7
+    #
+    # New (Revised) BSD License
+    blaze/3.7
+    #
+    # LGPL v3
+    mpfr/4.0.2
+)
+target_compile_definitions(
+  project_options INTERFACE SPDLOG_FMT_EXTERNAL gsl_CONFIG_DEFAULTS_VERSION=1
+)
+set(CONAN_OPTIONS)
+
+include(cmake/conan.cmake)
+run_conan()
+
+include_directories(include)
+
+add_library(%(project_name)s INTERFACE)
+target_link_libraries(
+  %(project_name)s
+  INTERFACE project_options
+            project_warnings
+            CONAN_PKG::boost
+            CONAN_PKG::range-v3
+            CONAN_PKG::gsl-lite
+            CONAN_PKG::fmt
+            CONAN_PKG::spdlog
+            CONAN_PKG::backward-cpp
+            CONAN_PKG::eigen
+            CONAN_PKG::blaze
+            CONAN_PKG::mpfr
+)
+
+if(ENABLE_TESTING)
+  enable_testing()
+  add_subdirectory(test)
+endif()
+
+if(ENABLE_BENCHMARK)
+  add_subdirectory(benchmark)
+endif()
+""" % {
+        "project_name": name,
+        "standard_version": str(standard_version),
+        "enable_gcc_extensions": "ON" if enable_gcc_extensions else "OFF",
+    }
+
+    test_cmake = """\
+include(../cmake/doctest.cmake)
+
+add_library(doctest-main STATIC doctest_main.cpp)
+target_link_libraries(doctest-main PUBLIC %(project_name)s)
+    """ % {
+        "project_name": name
+    }
+
+    benchmark_cmake = """\
+add_library(nanobench-main STATIC nanobench_main.cpp)
+target_link_libraries(nanobench-main PUBLIC %(project_name)s)
+
+include_directories(../include)
+    """ % {
+        "project_name": name
+    }
+
+    init(name, author, email)
+    Path("src").mkdir()
+    Path("include").mkdir()
+    Path("test").mkdir()
+    Path("benchmark").mkdir()
+
+    write_to_file("CMakeLists.txt", top_level_cmake)
+    write_to_file("test/CMakeLists.txt", test_cmake)
+    write_to_file("benchmark/CMakeLists.txt", benchmark_cmake)
+    return """\
+cp --recursive $DOTDIR/cpp/cmake cmake &&               \
+cp $DOTDIR/cpp/doctest.h test/ &&                       \
+cp $DOTDIR/cpp/doctest_main.cpp test/ &&                \
+cp $DOTDIR/cpp/nanobench.h benchmark/ &&                \
+cp $DOTDIR/cpp/nanobench_main.cpp benchmark/ &&         \
+cp $DOTDIR/cpp/clang-tidy .clang-tidy &&                \
+cp $DOTDIR/cpp/cmake-format.yaml .cmake-format.yaml &&  \
+cp $DOTDIR/cpp/clang-tidy .clang-tidy &&                \
+cp $DOTDIR/cpp/clang-format .clang-format               \
+            """
+
+
+def python(name, author, email):
+    init(name, author, email)
+    main_file = """def main():
+    pass
+if __name__ == "__main__":
+    main()
+"""
+    write_to_file("main.py", main_file)
+    return ""
+
+
+def main():
+    sys.tracebacklimit = 0
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--lang", type=str, help="project language")
+    parser.add_argument("name", help="Project name")
+    parser.add_argument("-a", "--author", type=str, help="author name")
+    parser.add_argument("-e", "--email", type=str, help="author email")
+
+    args = parser.parse_args()
+    if args.lang is None:
+        Path(args.name).mkdir()
+        post_command = ""
+
+    elif args.lang.startswith(("cxx", "cpp", "c++", "gnu++")):
+        try:
+            version = int(args.lang[-2:])
+        except ValueError:
+            version = 20
+        enable_gcc_extensions = args.lang.startswith("gnu++")
+        post_command = cpp(
+            args.name, args.author, args.email, version, enable_gcc_extensions
+        )
+    elif args.lang in ["python"]:
+        post_command = python(args.name, args.author, args.email)
+    else:
+        raise ValueError("Unrecognized language")
+    print(post_command)
+    print(args.name)
+
+
+if __name__ == "__main__":
+    main()

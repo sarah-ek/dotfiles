@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+from pathlib import Path
+from subprocess import DEVNULL, run
+
+from setup_tools.llvm import install_llvm_fn
+from setup_tools.helper import (
+    apt_install,
+    git_clone,
+    replace_with_symlink,
+    update_alternatives,
+)
+from setup_tools.utils import install_utils_fn, install_fonts_fn
+
+
+def main():
+    parser = argparse.ArgumentParser(description="setup environment")
+    parser.add_argument("--local-home", type=Path, help="personal home directory")
+    parser.add_argument("--python-version", type=str, help="python version")
+    parser.add_argument(
+        "--default-compiler", action="store_const", const="gcc", default="clang"
+    )
+    parser.add_argument(
+        "-y", dest="interactive", action="store_false", help="non interactive mode"
+    )
+
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--upgrade", action="store_true")
+    parser.add_argument("--texlive", action="store_true")
+    parser.add_argument("--utils", action="store_true")
+    parser.add_argument("--llvm", action="store_true")
+    parser.add_argument("--no-z3", action="store_true")
+
+    args = parser.parse_args()
+    if args.all:
+        args.upgrade = True
+
+    home = Path.home()
+    local_home: Path = args.local_home
+    python_version = args.python_version
+
+    def get_value(var_name, default_value):
+        if args.interactive:
+            return input(f"{var_name} (default={default_value}): ") or default_value
+        return default_value
+
+    if local_home is None:
+        local_home = get_value(
+            "local home", Path(os.environ.get("LOCAL_HOME", home / "personal"))
+        )
+    if python_version is None:
+        python_version = get_value("python version", "3.8")
+
+    for directory in [".local", ".config"]:
+        old: Path = home / directory
+        new: Path = local_home / directory
+        if not old.samefile(new):
+            if old.exists():
+                print(f"{new} already exists")
+                sys.exit(1)
+            old.rename(new)
+
+    dotdir = Path(sys.path[0])
+    Path.mkdir(home / ".local/share/dotfiles", parents=True, exist_ok=True)
+    if not dotdir.samefile(home / ".local/share/dotfiles"):
+        run(["cp", "-r", "-T", dotdir, home / ".local/share/dotfiles"], check=True)
+
+    run(["sudo", "add-apt-repository", "ppa:neovim-ppa/unstable", "-y"], check=True)
+    run(["sudo", "add-apt-repository", "ppa:phoerious/keepassxc", "-y"], check=True)
+    run(["sudo", "apt-get", "update", "-q=1"], check=True, stdout=DEVNULL)
+
+    zdotdir = home / ".local/share/zsh"
+    zdotdir.mkdir(parents=True, exist_ok=True)
+
+    replace_with_symlink(home / ".inputrc", dotdir / "inputrc")
+    replace_with_symlink(home / ".gitconfig", dotdir / "gitconfig")
+    replace_with_symlink(home / ".config/git/ignore", dotdir / "gitignore")
+    replace_with_symlink(zdotdir / ".zshrc", dotdir / "zshrc")
+    replace_with_symlink(local_home / ".rustfmt.toml", dotdir / "rustfmt.toml")
+
+    run(["touch", zdotdir / ".zshenv"], check=True)
+
+    with open(home / ".zshenv", "w") as file:
+        file.write(
+            f"""\
+    export ZDOTDIR="{zdotdir}"
+    source "$ZDOTDIR/.zshenv"
+    cd {local_home}
+    """
+        )
+
+    apt_install("build-essential")
+    apt_install("curl")
+    apt_install("zsh")
+    apt_install("git")
+    apt_install("zip", "unzip")
+
+    install_texlive = args.all or args.texlive
+    install_utils = args.all or args.utils
+    install_llvm = args.all or args.llvm
+
+    git_clone(
+        "git@github.com:kitegi/nvim.git",
+        local_home / ".config/nvim",
+        force=True,
+        github=False,
+    )
+
+    git_clone("robbyrussell/oh-my-zsh.git", zdotdir / "oh-my-zsh", force=args.upgrade)
+
+    Path.mkdir(home / ".local/share/nvim/autoload", parents=True, exist_ok=True)
+    run(
+        [
+            "wget",
+            "https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim",
+            "-O",
+            local_home / ".local/share/nvim/autoload/plug.vim",
+        ],
+        check=True,
+    )
+
+    apt_install(
+        f"python3-pip",
+        f"python{python_version}",
+        f"python{python_version}-dev",
+        f"python{python_version}-venv",
+        f"libpython{python_version}",
+        f"libpython{python_version}-dev",
+        f"libpython{python_version}-dbg",
+        f"libpython{python_version}-stdlib",
+    )
+    update_alternatives("python3", f"/usr/bin/python{python_version}")
+
+    apt_install("gcc-9", "g++-9", "gcc-9-doc", "libgcc-9-dev")
+    update_alternatives("gcc", f"/usr/bin/gcc-9")
+    update_alternatives("g++", f"/usr/bin/g++-9")
+
+    if install_texlive:
+        apt_install("texlive")
+    apt_install("gfortran", "libopenblas-dev", "liblapack3", "liblapack-dev")
+    apt_install("libsndio-dev", "libbz2-dev")
+    apt_install("python3-tk")
+    apt_install("asciidoc", "ncdu", "keepassxc", "npm", "nodejs")
+    apt_install("zlib1g-dev", "libncurses-dev")
+
+    apt_install("neovim")
+    run([local_home.absolute() / ".config/nvim/setup.sh"], check=True)
+    nvim_packages = run(
+        [local_home.absolute() / ".local/share/nvim/venv/bin/pip", "freeze"],
+        check=True,
+        capture_output=True,
+    ).stdout.split()
+
+    venv_dir = local_home.absolute() / ".local/share/python"
+    if not venv_dir.exists():
+        venv_dir.mkdir()
+    if not (venv_dir / "venv/bin/activate").exists():
+        run(["python3", "-m", "venv", "--prompt=base", venv_dir / "venv"], check=True)
+    pip = venv_dir / "venv/bin/pip"
+    os.system(
+        f'. "{venv_dir}/venv/bin/activate" \
+    && "{pip}" -q install --upgrade wheel \
+    && "{pip}" -q install --upgrade {b" ".join(nvim_packages).decode()} \
+    && "{pip}" install --upgrade --no-cache-dir cmake conan \
+    && "{pip}" install --upgrade --no-cache-dir numpy scipy sympy \
+    && "{pip}" install --upgrade --no-cache-dir ipython matplotlib \
+    '
+    )
+
+    os.environ["CARGO_HOME"] = (local_home / ".cargo").as_posix()
+    os.environ["RUSTUP_HOME"] = (local_home / ".rustup").as_posix()
+
+    if not Path.samefile(local_home / ".cargo", home / ".cargo"):
+        run(["ln", "-t", home, "-s", local_home / ".cargo"], check=True)
+    if not Path.samefile(local_home / ".rustup", home / ".rustup"):
+        run(["ln", "-t", home, "-s", local_home / ".rustup"], check=True)
+
+    os.system("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y")
+    run(["rustup", "update", "stable"], check=True)
+    Path.mkdir(local_home / ".local/share/man/man1", parents=True, exist_ok=True)
+
+    if install_utils:
+        install_utils_fn(args, local_home, zdotdir)
+        install_fonts_fn()
+
+    if install_llvm:
+        install_llvm_fn(args, dotdir / "setup_tools/llvm.sh")
+
+    if args.default_compiler == "gcc":
+        update_alternatives("cc", Path("/usr/bin") / "gcc", priority=100)
+        update_alternatives("c++", Path("/usr/bin") / "g++", priority=100)
+
+        update_alternatives("cc", Path("/usr/bin") / "clang", priority=99)
+        update_alternatives("c++", Path("/usr/bin") / "clang++", priority=99)
+    else:
+        update_alternatives("cc", Path("/usr/bin") / "gcc", priority=99)
+        update_alternatives("c++", Path("/usr/bin") / "g++", priority=99)
+
+        update_alternatives("cc", Path("/usr/bin") / "clang", priority=100)
+        update_alternatives("c++", Path("/usr/bin") / "clang++", priority=100)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,10 @@
+.ccls-cache
+.clangd
+build
+build-gcc
+build-clang
+target
+.vim
+compile_commands.json
+__pycache__
+.vscode
