@@ -26,34 +26,41 @@ def write_to_file(filename, text):
 
 
 def cpp(name, author, email, standard_version, enable_gcc_extensions):
-    top_level_cmake = """\
+    arg_dict = {
+        "project_name": name,
+        "author": author,
+        "standard_version": str(standard_version),
+        "enable_gcc_extensions": "ON" if enable_gcc_extensions else "OFF",
+    }
+
+    top_level_cmake = (
+        """\
 cmake_minimum_required(VERSION 3.16)
 project(%(project_name)s CXX)
 
-include(cmake/standard_project_settings.cmake)
+set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
-# Link this 'library' to set the c++ standard / compile-time options requested
+if(ENABLE_DOCS_ONLY)
+  add_subdirectory("docs")
+  return()
+endif()
+
+include(cmake/standard_project_settings.cmake)
+include(cmake/compiler_warnings.cmake)
+include(cmake/static_analyzers.cmake)
+include(cmake/sanitizers.cmake)
+
+set_project_warnings(project_warnings)
+
+# link this 'library' to set the c++ standard / compile-time options requested
 add_library(project_options INTERFACE)
 set(CMAKE_CXX_STANDARD %(standard_version)s)
 set(CMAKE_CXX_EXTENSIONS %(enable_gcc_extensions)s)
 
-# Link this 'library' to use the warnings specified in compiler_warnings.cmake
+# link this 'library' to use the warnings specified in compiler_warnings.cmake
 add_library(project_warnings INTERFACE)
 
-# standard compiler warnings
-include(cmake/compiler_warnings.cmake)
-set_project_warnings(project_warnings)
-
-# sanitizer options if supported by compiler
-include(cmake/sanitizers.cmake)
 enable_sanitizers(project_options)
-
-# enable doxygen
-include(cmake/doxygen.cmake)
-enable_doxygen()
-
-# allow for static analysis options
-include(cmake/static_analyzers.cmake)
 
 option(ENABLE_PCH "Enable Precompiled Headers" OFF)
 if(ENABLE_PCH)
@@ -122,39 +129,122 @@ endif()
 if(ENABLE_BENCHMARK)
   add_subdirectory(benchmark)
 endif()
-""" % {
-        "project_name": name,
-        "standard_version": str(standard_version),
-        "enable_gcc_extensions": "ON" if enable_gcc_extensions else "OFF",
-    }
 
-    test_cmake = """\
+if(ENABLE_DOCS)
+  add_subdirectory ("docs")
+endif()
+"""
+        % arg_dict
+    )
+
+    test_cmake = (
+        """\
 include(../cmake/doctest.cmake)
 
 add_library(doctest-main STATIC doctest_main.cpp)
 target_link_libraries(doctest-main PUBLIC %(project_name)s)
-    """ % {
-        "project_name": name
-    }
+"""
+        % arg_dict
+    )
 
-    benchmark_cmake = """\
+    benchmark_cmake = (
+        """\
 add_library(nanobench-main STATIC nanobench_main.cpp)
 target_link_libraries(nanobench-main PUBLIC %(project_name)s)
 
 include_directories(../include)
-    """ % {
-        "project_name": name
-    }
+"""
+        % arg_dict
+    )
+
+    docs_cmake = (
+        """\
+function(enable_doxygen)
+  set(DOXYGEN_GENERATE_XML YES)
+  set(DOXYGEN_CALLER_GRAPH YES)
+  set(DOXYGEN_CALL_GRAPH YES)
+  set(DOXYGEN_EXTRACT_ALL YES)
+  find_package(Doxygen REQUIRED dot)
+  doxygen_add_docs(doxygen-docs ${PROJECT_SOURCE_DIR}/include)
+endfunction()
+
+enable_doxygen()
+
+find_package(Sphinx REQUIRED)
+set(SPHINX_SOURCE ${CMAKE_CURRENT_SOURCE_DIR})
+set(SPHINX_BUILD ${CMAKE_CURRENT_BINARY_DIR}/sphinx)
+
+add_custom_target(
+  sphinx ALL
+  DEPENDS doxygen-docs
+  COMMAND
+    ${SPHINX_EXECUTABLE} -b html
+    -Dbreathe_projects.%(project_name)s=${CMAKE_CURRENT_BINARY_DIR}/xml
+    ${SPHINX_SOURCE} ${SPHINX_BUILD}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  COMMENT "Generating documentation with Sphinx"
+)
+"""
+        % arg_dict
+    )
+
+    docs_index = (
+        """\
+%(project_name)s
+=======================================
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+:ref:`genindex`
+
+Docs
+====
+"""
+        % arg_dict
+    )
+
+    docs_conf = (
+        """\
+import subprocess, os
+
+read_the_docs_build = os.environ.get('READTHEDOCS', None) == 'True'
+if read_the_docs_build:
+    subprocess.call(
+        'mkdir -p build && cd build && '
+        'cmake -DENABLE_DOCS_ONLY=ON ../.. && '
+        'make doxygen-docs',
+        shell=True)
+    breathe_projects = {'%(project_name)s': 'build/docs/xml'}
+
+project = "%(project_name)s"
+author = "%(author)s"
+extensions = ["breathe"]
+templates_path = ["_templates"]
+exclude_patterns = ["_build"]
+html_static_path = []
+html_theme = "sphinx_rtd_theme"
+breathe_default_project = "%(project_name)s"
+"""
+        % arg_dict
+    )
 
     init(name, author, email)
     Path("src").mkdir()
     Path("include").mkdir()
     Path("test").mkdir()
     Path("benchmark").mkdir()
+    Path("docs").mkdir()
 
     write_to_file("CMakeLists.txt", top_level_cmake)
     write_to_file("test/CMakeLists.txt", test_cmake)
     write_to_file("benchmark/CMakeLists.txt", benchmark_cmake)
+    write_to_file("docs/CMakeLists.txt", docs_cmake)
+    write_to_file("docs/index.rst", docs_index)
+    write_to_file("docs/conf.py", docs_conf)
+    write_to_file("docs/requirements.txt", "breathe\ncmake\n")
+
     return """\
 cp --recursive $DOTDIR/cpp/cmake cmake &&               \
 cp $DOTDIR/cpp/doctest.h test/ &&                       \
