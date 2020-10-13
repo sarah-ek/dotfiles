@@ -168,7 +168,7 @@ function __cmake_config__() {
 }
 function __cmake_run__() {
   /usr/bin/time --format '\nCompilation time: %E' \
-    make -j4 --directory $1 $2
+    make --jobs=$MAKE_THREADS --directory $1 $2
   local err=$?
   __fix_compile_database__
 
@@ -251,11 +251,12 @@ function disassemble() {
       --reloc                                       \
       --demangle                                    \
       --line-numbers                                \
+      --syms                                        \
       -M intel                                      \
       --source $@                                   \
-  | sed '/^ *[0-f]*:\t\([0-f][0-f] \)*$/d'                  \
+  | sed '/^ *[0-f]*:\t\([0-f][0-f] \)*$/d'          \
   | sed ${(j::)merge_call_lines}                    \
-  | sed ${(j::)merge_jmp_lines}                    \
+  | sed ${(j::)merge_jmp_lines}                     \
 
 }
 
@@ -293,10 +294,11 @@ MANPATH="$LOCAL_HOME/.local/share/man:$MANPATH"
 base
 
 export CMAKE_EXPORT_COMPILE_COMMANDS=ON
-export ASAN_OPTIONS="detect_stack_use_after_return=1"
+export ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1"
 export UBSAN_OPTIONS="print_stacktrace=1"
 export MSAN_OPTIONS="poison_in_dtor=1"
 export RUSTFLAGS="-C target-cpu=native"
+export MAKE_THREADS=$(nproc)
 
 SAN_FLAGS=(-g
            -fsanitize=address,undefined

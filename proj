@@ -81,9 +81,9 @@ set(CONAN_REQUIRES
     range-v3/0.11.0
     #
     # MIT License
-    gsl-lite/0.36.0
+    gsl-lite/0.37.0
     fmt/7.0.3
-    spdlog/1.7.0
+    spdlog/1.8.0
     backward-cpp/1.5
     #
     # Mozilla Public License 2.0
