@@ -24,7 +24,7 @@ def update_llvm_alternatives(names, version=10, priority=100):
         run(["sudo", "update-alternatives", "--set", new_name, orig_name], check=True)
 
 
-def install_llvm_fn(args, llvm_script, version=10):
+def install_llvm_fn(args, llvm_script, version=11):
     apt_install("libedit-dev", "swig")
 
     if not args.no_z3:
@@ -91,7 +91,6 @@ def install_llvm_fn(args, llvm_script, version=10):
             f"clang-doc-{version}",
             f"clang-extdef-mapping-{version}",
             f"clang-format-{version}",
-            f"clang-import-test-{version}",
             f"clang-include-fixer-{version}",
             f"clang-offload-bundler-{version}",
             f"clang-query-{version}",
