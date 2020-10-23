@@ -1,5 +1,8 @@
 .ccls-cache
+.cache
 .clangd
+.gdb_history
+output
 build
 build-gcc
 build-clang
