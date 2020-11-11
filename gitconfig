@@ -2,3 +2,6 @@
 	excludesfile = ~/.config/git/ignore
 [push]
 	default = simple
+[user]
+	name = kitegi
+	email = <>

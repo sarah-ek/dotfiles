@@ -78,7 +78,7 @@ def main():
     replace_with_symlink(home / ".gitconfig", dotdir / "gitconfig")
     replace_with_symlink(home / ".config/git/ignore", dotdir / "gitignore")
     replace_with_symlink(zdotdir / ".zshrc", dotdir / "zshrc")
-    replace_with_symlink(local_home / ".rustfmt.toml", dotdir / "rustfmt.toml")
+    replace_with_symlink(local_home / ".rustfmt.toml", dotdir / "rust" / "rustfmt.toml")
 
     run(["touch", zdotdir / ".zshenv"], check=True)
 

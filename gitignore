@@ -1,6 +1,7 @@
 .ccls-cache
 .cache
 .clangd
+-.json
 .gdb_history
 output
 build

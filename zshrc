@@ -156,7 +156,7 @@ function __cmake_config__() {
     fi
 
     CC=$CC CXX=$CXX \
-      cmake -H. -B build/$d \
+      cmake -H$PWD -B $(realpath ./build/$d) \
       -DCMAKE_BUILD_TYPE=$build_type $extra_opts \
       || return -1
 
