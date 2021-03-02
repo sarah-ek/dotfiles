@@ -63,14 +63,14 @@ def install_utils_fn(args, local_home, zdotdir):
 
     for util in ["rg", "fd", "loc", "lsd", "hyperfine", "bat"]:
         os.chdir(f"/tmp/{util}")
-        run(["cargo", "install", "--force", "--path", "."], check=True)
+        # run([local_home / ".cargo/bin/cargo", "install", "--force", "--path", "."], check=True)
         os.system(docs_completions_cmd.get(util, ""))
     os.chdir("/tmp/rust-analyzer-repo")
-    run(["cargo", "install-ra", "--server"], check=True)
+    # run([local_home / ".cargo/bin/cargo", "install-ra", "--server"], check=True)
 
-    os.chdir("/tmp/neovide")
-    run(["cargo", "build", "--release"], check=True)
-    run(["cp", "-f", "target/release/neovide", local_bin], check=True)
+    # os.chdir("/tmp/neovide")
+    # run([local_home / ".cargo/bin/cargo", "build", "--release"], check=True)
+    # run(["cp", "-f", "target/release/neovide", local_bin], check=True)
 
 
 def install_fonts_fn():
@@ -93,6 +93,7 @@ def install_fonts_fn():
     )
     run(
         [
+            "sudo",
             "unzip",
             "-u",
             "-d",

@@ -5,6 +5,8 @@ then
   export TERM=xterm-256color
 fi
 
+DOTDIR="$LOCAL_HOME/.local/share/dotfiles"
+
 # Path to your oh-my-zsh installation.
 export ZSH="$LOCAL_HOME/.local/share/zsh/oh-my-zsh"
 
@@ -92,16 +94,22 @@ function cd() {
   HOME="$LOCAL_HOME" builtin cd $@
 }
 function __fix_compile_database__() {
-  ln --symbolic --force build/debug/gcc/compile_commands.json
   setopt local_options nonomatch
   for pch in build/**/cmake_pch.hxx; do
     [[ -e "$pch" ]] || continue
     ln --symbolic --force cmake_pch.hxx ${pch%.hxx}_.hxx
   done
+  for pch in build/**/cmake_pch.hxx.cxx; do
+    [[ -e "$pch" ]] || continue
+    ln --symbolic --force cmake_pch.hxx.cxx ${pch%.hxx.cxx}_.hxx.cxx
+  done
+
   for cmd_db in build/**/compile_commands.json; do
     [[ -e "$cmd_db" ]] || continue
     sed --in-place 's/cmake_pch.hxx/cmake_pch_.hxx/g' $cmd_db
+    compdb -p $(dirname $cmd_db) list > $cmd_db.fixed
   done
+  ln --symbolic --force build/debug/gcc/compile_commands.json.fixed compile_commands.json
 }
 function __cmake_config__() {
   if [[ ! -f 'CMakeLists.txt' ]] then; return; fi
@@ -148,8 +156,15 @@ function __cmake_config__() {
       local CC=gcc
       local CXX=g++
     else
-      local CC=clang
-      local CXX=clang++
+      if [[ $d == *templight ]]
+      then
+        local CC="$(which templight) -Xtemplight -profiler"
+        local CXX="$(which templight++) -Xtemplight -profiler"
+      else
+        local CC=clang
+        local CXX=clang++
+      fi
+
       if [[ -n $use_libcxx ]] then
         local extra_opts=($extra_opts '-DUSE_LIBCXX=ON')
       fi
@@ -198,7 +213,9 @@ function new () {
   echo $output | head --lines -2
   local post_cmd=$(echo $output | tail --lines 2 | head --lines 1)
   local name=$(echo $output | tail --lines 1)
-  cd $name
+  if [[ -n $name ]] then
+    cd $name
+  fi
   eval $post_cmd
 }
 
@@ -276,9 +293,6 @@ compdef __cmake_run__completion __cmake_run__
 # Rust paths
 export CARGO_HOME="$LOCAL_HOME/.cargo"
 export RUSTUP_HOME="$LOCAL_HOME/.rustup"
-export VCPKG_ROOT=$LOCAL_HOME/vcpkg
-export VCPKG_FEATURE_FLAGS=manifests,
-export VCPKG_DISABLE_METRICS=
 
 PATH="$LOCAL_HOME/.cargo/bin:$PATH"
 PATH="$LOCAL_HOME/.local/bin:$PATH"
@@ -294,7 +308,7 @@ MANPATH="$LOCAL_HOME/.local/share/man:$MANPATH"
 base
 
 export CMAKE_EXPORT_COMPILE_COMMANDS=ON
-export ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1"
+export ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1,detect_invalid_pointer_pairs=2"
 export UBSAN_OPTIONS="print_stacktrace=1"
 export MSAN_OPTIONS="poison_in_dtor=1"
 export RUSTFLAGS="-C target-cpu=native"

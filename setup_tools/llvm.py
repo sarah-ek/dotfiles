@@ -27,19 +27,6 @@ def update_llvm_alternatives(names, version=10, priority=100):
 def install_llvm_fn(args, llvm_script, version=11):
     apt_install("libedit-dev", "swig")
 
-    if not args.no_z3:
-        git_clone(
-            "Z3Prover/z3",
-            "/tmp/z3-repo",
-            install_target=Path("/usr/bin/z3"),
-            force=True,
-        )
-        os.chdir("/tmp/z3-repo")
-        run(["/usr/bin/python", "scripts/mk_make.py"], check=True)
-        os.chdir("build")
-        run(["make", "-j4"], check=True)
-        run(["sudo", "make", "install"], check=True)
-
     run(["sudo", "bash", llvm_script, str(version)], check=True)
     # LLVM
     apt_install(

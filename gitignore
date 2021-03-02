@@ -5,6 +5,7 @@
 .gdb_history
 output
 build
+docbuild
 build-gcc
 build-clang
 target
@@ -12,3 +13,4 @@ target
 compile_commands.json
 __pycache__
 .vscode
+.vimspector.json
