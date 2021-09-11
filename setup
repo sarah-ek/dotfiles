@@ -45,7 +45,7 @@ def main():
         return default_value
 
     if python_version is None:
-        python_version = get_value("python version", "3.8")
+        python_version = get_value("python version", "3.9")
 
     dotdir = Path(sys.path[0])
     Path.mkdir(home / ".local/share/dotfiles", parents=True, exist_ok=True)
@@ -86,13 +86,6 @@ def main():
     install_utils = args.all or args.utils
     install_llvm = args.all or args.llvm
 
-    git_clone(
-        "git@github.com:kitegi/nvim.git",
-        home / ".config/nvim",
-        force=True,
-        github=False,
-    )
-
     git_clone("robbyrussell/oh-my-zsh.git", zdotdir / "oh-my-zsh", force=args.upgrade)
 
     Path.mkdir(home / ".local/share/nvim/autoload", parents=True, exist_ok=True)
@@ -118,9 +111,9 @@ def main():
     )
     update_alternatives("python3", f"/usr/bin/python{python_version}")
 
-    apt_install("gcc-10", "g++-10", "gcc-10-doc", "libgcc-10-dev")
-    update_alternatives("gcc", f"/usr/bin/gcc-10")
-    update_alternatives("g++", f"/usr/bin/g++-10")
+    apt_install("gcc-11", "g++-11", "gcc-11-doc", "libgcc-11-dev")
+    update_alternatives("gcc", f"/usr/bin/gcc-11")
+    update_alternatives("g++", f"/usr/bin/g++-11")
 
     if install_texlive:
         apt_install("texlive")
@@ -130,7 +123,7 @@ def main():
     apt_install("asciidoc", "ncdu", "keepassxc", "npm", "nodejs")
     apt_install("zlib1g-dev", "libncurses-dev")
 
-    run([home.absolute() / ".config/nvim/setup.sh"], check=True)
+    # run([home.absolute() / ".config/nvim/setup.sh"], check=True)
     nvim_packages = run(
         [home.absolute() / ".local/share/nvim/venv/bin/pip", "freeze"],
         check=True,

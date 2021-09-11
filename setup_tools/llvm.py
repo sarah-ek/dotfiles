@@ -5,7 +5,7 @@ from subprocess import DEVNULL, run
 from setup_tools.helper import apt_install, update_alternatives, git_clone
 
 
-def update_llvm_alternatives(names, version=10, priority=100):
+def update_llvm_alternatives(names, version=12, priority=100):
     for name in names:
         new_name = name.replace(f"-{version}", "")
         orig_name = Path("/usr/bin") / name
@@ -24,7 +24,7 @@ def update_llvm_alternatives(names, version=10, priority=100):
         run(["sudo", "update-alternatives", "--set", new_name, orig_name], check=True)
 
 
-def install_llvm_fn(args, llvm_script, version=11):
+def install_llvm_fn(args, llvm_script, version=12):
     apt_install("libedit-dev", "swig")
 
     run(["sudo", "bash", llvm_script, str(version)], check=True)

@@ -95,16 +95,16 @@ function cd() {
 }
 function __fix_compile_database__() {
   setopt local_options nonomatch
-  for pch in build/**/cmake_pch.hxx; do
+  for pch in build/debug/gcc/**/cmake_pch.hxx; do
     [[ -e "$pch" ]] || continue
     ln --symbolic --force cmake_pch.hxx ${pch%.hxx}_.hxx
   done
-  for pch in build/**/cmake_pch.hxx.cxx; do
+  for pch in build/debug/gcc/**/cmake_pch.hxx.cxx; do
     [[ -e "$pch" ]] || continue
     ln --symbolic --force cmake_pch.hxx.cxx ${pch%.hxx.cxx}_.hxx.cxx
   done
 
-  for cmd_db in build/**/compile_commands.json; do
+  for cmd_db in build/debug/gcc/**/compile_commands.json; do
     [[ -e "$cmd_db" ]] || continue
     sed --in-place 's/cmake_pch.hxx/cmake_pch_.hxx/g' $cmd_db
     compdb -p $(dirname $cmd_db) list > $cmd_db.fixed
@@ -150,6 +150,8 @@ function __cmake_config__() {
       local build_type=Release
     fi
 
+    local cmake_cxx_flags=
+
     local use_libcxx=''
     if [[ $d == *gcc ]]
     then
@@ -163,6 +165,7 @@ function __cmake_config__() {
       else
         local CC=clang
         local CXX=clang++
+        local cmake_cxx_flags="-fmodules"
       fi
 
       if [[ -n $use_libcxx ]] then
@@ -172,7 +175,7 @@ function __cmake_config__() {
 
     CC=$CC CXX=$CXX \
       cmake -H$PWD -B $(realpath ./build/$d) \
-      -DCMAKE_BUILD_TYPE=$build_type $extra_opts \
+      -DCMAKE_BUILD_TYPE=$build_type $extra_opts -DCMAKE_CXX_FLAGS=$cmake_cxx_flags \
       || return -1
 
     if [[ $d == debug/gcc ]]
@@ -185,7 +188,6 @@ function __cmake_run__() {
   /usr/bin/time --format '\nCompilation time: %E' \
     make --jobs=$MAKE_THREADS --directory $1 $2
   local err=$?
-  __fix_compile_database__
 
   if [[ $err != 0 ]] then
     return $err
@@ -222,6 +224,7 @@ function new () {
 alias cconfig=__cmake_config__
 alias crun=__cmake_run__
 alias copt=__cmake_show_options__
+alias cfix=__fix_compile_database__
 
 function __cmake_run__completion() {
   _arguments '1:build_dir:_dirs' '2:targets:->targets'

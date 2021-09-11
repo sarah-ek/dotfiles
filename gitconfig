@@ -3,5 +3,9 @@
 [push]
 	default = simple
 [user]
-	name = kitegi
+	name = sarah
 	email = <>
+[init]
+	defaultBranch = main
+[pull]
+	ff = only
